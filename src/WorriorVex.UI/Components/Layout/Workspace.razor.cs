@@ -1178,6 +1178,9 @@ public partial class Workspace
                 items.Add(new(T["New note"], () => NewNoteInAsync(notebook.NotebookId, null)));
                 items.Add(new(T["New folder"], () => { PromptNewFolderIn(notebook.NotebookId, null, notebookName); return Task.CompletedTask; }));
                 items.Add(ContextMenu.Item.Line());
+                items.Add(new(T["Move up"], () => MoveNotebookByAsync(notebook.NotebookId, -1)));
+                items.Add(new(T["Move down"], () => MoveNotebookByAsync(notebook.NotebookId, 1)));
+                items.Add(ContextMenu.Item.Line());
                 items.Add(new(T["Rename…"], () => { PromptRenameNotebook(notebook.NotebookId, notebookName); return Task.CompletedTask; }));
                 items.Add(new(T["Delete"], () => { ConfirmDeleteNotebook(notebook.NotebookId, notebookName); return Task.CompletedTask; }));
                 break;
@@ -1185,6 +1188,9 @@ public partial class Workspace
                 var folderName = _folders.FirstOrDefault(f => f.Id == folder.FolderId)?.Name ?? T["Folder"];
                 items.Add(new(T["New note"], () => NewNoteInAsync(folder.NotebookId, folder.FolderId)));
                 items.Add(new(T["New folder"], () => { PromptNewFolderIn(folder.NotebookId, folder.FolderId, folderName); return Task.CompletedTask; }));
+                items.Add(ContextMenu.Item.Line());
+                items.Add(new(T["Move up"], () => MoveFolderByAsync(folder.FolderId, -1)));
+                items.Add(new(T["Move down"], () => MoveFolderByAsync(folder.FolderId, 1)));
                 items.Add(ContextMenu.Item.Line());
                 items.Add(new(T["Rename…"], () => { PromptRenameFolder(folder.FolderId, folderName); return Task.CompletedTask; }));
                 items.Add(new(T["Move…"], () => { OpenMove(folder.FolderId, isFolder: true, folderName); return Task.CompletedTask; }));
@@ -1400,21 +1406,52 @@ public partial class Workspace
     }
 
     /// <summary>A note or folder was dropped on a notebook or folder in the navigation.</summary>
+    private async Task<string> DropZoneAsync()
+    {
+        try
+        {
+            return _shortcutsModule is null ? "into" : await _shortcutsModule.InvokeAsync<string>("lastDropZone");
+        }
+        catch (JSException)
+        {
+            return "into";
+        }
+    }
+
     private async Task DropAsync(NavSelection target)
     {
-        if (_draggingNotebook is { } movingNotebook)
-        {
-            _draggingNotebook = null;
-            ConfirmNotebookMove(movingNotebook, target);
-            return;
-        }
-
-        if (_dragging is not { } dragged)
-        {
-            return;
-        }
-
+        // Taken before anything is awaited: the drag's end arrives meanwhile and clears them.
+        var draggingNotebook = _draggingNotebook;
+        var draggingItem = _dragging;
+        _draggingNotebook = null;
         _dragging = null;
+        var zone = await DropZoneAsync();
+        if (draggingNotebook is { } movingNotebook)
+        {
+            if (zone != "into" && target is NavSelection.Notebook beside && beside.NotebookId != movingNotebook)
+            {
+                await ReorderNotebookAsync(movingNotebook, beside.NotebookId, after: zone == "after");
+            }
+            else
+            {
+                ConfirmNotebookMove(movingNotebook, target);
+            }
+
+            return;
+        }
+
+        if (draggingItem is not { } dragged)
+        {
+            return;
+        }
+
+        if (dragged.IsFolder && zone != "into" && target is NavSelection.Folder sibling && sibling.FolderId != dragged.Id)
+        {
+            // On the edge of a folder: beside it, in the same place, before or after it.
+            await PlaceFolderBesideAsync(dragged.Id, sibling.FolderId, after: zone == "after");
+            return;
+        }
+
         var (notebookId, parentId) = target switch
         {
             NavSelection.Folder folder => (folder.NotebookId, (Guid?)folder.FolderId),
@@ -1438,6 +1475,84 @@ public partial class Workspace
     }
 
     // ---- Notebooks and folders -----------------------------------------------------------------
+
+    /// <summary>Folders beside one another, in the order the tree shows them.</summary>
+    private List<FolderSummary> SiblingsOf(Guid notebookId, Guid? parentId) =>
+        [.. _folders.Where(f => f.NotebookId == notebookId && f.ParentId == parentId).OrderBy(f => f.SortOrder).ThenBy(f => f.Name, StringComparer.CurrentCulture)];
+
+    private async Task PlaceFolderBesideAsync(Guid folderId, Guid besideId, bool after)
+    {
+        var beside = _folders.FirstOrDefault(f => f.Id == besideId);
+        var moving = _folders.FirstOrDefault(f => f.Id == folderId);
+        if (beside is null || moving is null)
+        {
+            return;
+        }
+
+        var siblings = SiblingsOf(beside.NotebookId, beside.ParentId).Where(f => f.Id != folderId).ToList();
+        var index = siblings.FindIndex(f => f.Id == besideId) + (after ? 1 : 0);
+        await RunAsync(T["That could not be moved."], async () =>
+        {
+            await Tree.MoveAsync(folderId, beside.NotebookId, beside.ParentId, index);
+            await LoadStructureAsync();
+        });
+    }
+
+    /// <summary>Up (-1) or down (+1) among the folders beside it.</summary>
+    private async Task MoveFolderByAsync(Guid folderId, int step)
+    {
+        var folder = _folders.FirstOrDefault(f => f.Id == folderId);
+        if (folder is null)
+        {
+            return;
+        }
+
+        var siblings = SiblingsOf(folder.NotebookId, folder.ParentId);
+        var index = siblings.FindIndex(f => f.Id == folderId) + step;
+        if (index < 0 || index >= siblings.Count)
+        {
+            return;
+        }
+
+        await RunAsync(T["That could not be moved."], async () =>
+        {
+            await Tree.MoveAsync(folderId, folder.NotebookId, folder.ParentId, index);
+            await LoadStructureAsync();
+        });
+    }
+
+    private List<NotebookSummary> OrderedUserNotebooks => [.. _notebooks.Where(n => !n.IsInbox && !n.IsCalendar)];
+
+    private async Task ReorderNotebookAsync(Guid notebookId, Guid besideId, bool after)
+    {
+        var others = OrderedUserNotebooks.Where(n => n.Id != notebookId).ToList();
+        var index = others.FindIndex(n => n.Id == besideId);
+        if (index < 0)
+        {
+            return;
+        }
+
+        await RunAsync(T["That could not be moved."], async () =>
+        {
+            await Notebooks.ReorderAsync(notebookId, index + (after ? 1 : 0));
+            await LoadStructureAsync();
+        });
+    }
+
+    private async Task MoveNotebookByAsync(Guid notebookId, int step)
+    {
+        var index = OrderedUserNotebooks.FindIndex(n => n.Id == notebookId) + step;
+        if (index < 0 || index >= OrderedUserNotebooks.Count)
+        {
+            return;
+        }
+
+        await RunAsync(T["That could not be moved."], async () =>
+        {
+            await Notebooks.ReorderAsync(notebookId, index);
+            await LoadStructureAsync();
+        });
+    }
 
     /// <summary>A notebook was dropped on another notebook or a folder: ask, then make it a folder there.</summary>
     private void ConfirmNotebookMove(Guid notebookId, NavSelection target)

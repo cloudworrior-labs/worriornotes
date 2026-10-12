@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.7 — 2026-10-12
+
+- Reorder folders and notebooks: drop one on the top or bottom edge of another row to place it before
+  or after (a line shows where); dropping on the middle still puts it inside. Right-click has
+  **Move up** and **Move down** as well.
+
 ## 0.6.6 — 2026-10-10
 
 - A note with many attachments keeps its room: the list under the note folds to one line

@@ -17,6 +17,27 @@ export function register(dotNetRef) {
   // A file dropped outside the editor would otherwise make the window navigate to that file.
   const ignoreDrop = (event) => event.preventDefault();
 
+  // Over a notebook or folder row, the top and bottom quarter mean "before" and "after" it, the
+  // rest means "inside". A line or a highlight shows which; the app reads it when the drop comes.
+  const onDragOver = (event) => {
+    const row = event.target.closest?.('[data-drop-row]');
+    if (!row) {
+      clearDropZone();
+      return;
+    }
+    const box = row.getBoundingClientRect();
+    const y = event.clientY - box.top;
+    const edge = Math.max(5, box.height / 4);
+    const zone = y < edge ? 'before' : y > box.height - edge ? 'after' : 'into';
+    if (row !== dropRow || zone !== dropZone) {
+      clearDropZone();
+      dropRow = row;
+      dropZone = zone;
+      row.classList.add(`wn-drop-${zone}`);
+    }
+  };
+  const onDragEnd = () => setTimeout(clearDropZone, 0);
+
   // Dragging notes and folders is handled by the app; some engines only start a drag that carries data.
   const onDragStart = (event) => {
     if (event.target.closest?.('[draggable="true"]') && event.dataTransfer) {
@@ -29,14 +50,33 @@ export function register(dotNetRef) {
   window.addEventListener('dragover', ignoreDrop);
   window.addEventListener('drop', ignoreDrop);
   window.addEventListener('dragstart', onDragStart);
+  window.addEventListener('dragover', onDragOver);
+  window.addEventListener('dragend', onDragEnd);
+  window.addEventListener('drop', onDragEnd);
   return {
     dispose: () => {
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragend', onDragEnd);
+      window.removeEventListener('drop', onDragEnd);
       window.removeEventListener('dragstart', onDragStart);
       window.removeEventListener('dragover', ignoreDrop);
       window.removeEventListener('drop', ignoreDrop);
     },
   };
+}
+
+let dropRow = null;
+let dropZone = 'into';
+
+function clearDropZone() {
+  dropRow?.classList.remove('wn-drop-before', 'wn-drop-after', 'wn-drop-into');
+  dropRow = null;
+}
+
+/** Where on the row the last drag was: "before", "after" or "into". Read by the app when something is dropped. */
+export function lastDropZone() {
+  return dropZone;
 }
 
 const SHORTCUTS = {

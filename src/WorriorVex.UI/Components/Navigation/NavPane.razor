@@ -112,7 +112,7 @@
                         else
                         {
                             <button type="button" class="wn-navitem @SelectedClass(selection) @DropClass(notebook.Id)" aria-current="@Current(selection)" title="@notebook.Name"
-                                    data-tree-item data-level="0" data-expanded="@(hasChildren ? (expanded ? "true" : "false") : null)"
+                                    data-tree-item data-drop-row data-level="0" data-expanded="@(hasChildren ? (expanded ? "true" : "false") : null)"
                                     @onclick="() => OnSelect.InvokeAsync(selection)" @ondblclick="() => _renamingId = notebook.Id"
                                     @onkeydown="e => OnNotebookKeyAsync(e, notebook.Id)"
                                     @oncontextmenu:preventDefault @oncontextmenu="e => OnContextMenu.InvokeAsync((selection, e))"
