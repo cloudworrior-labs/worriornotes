@@ -28,7 +28,10 @@ export function register(dotNetRef) {
     const box = row.getBoundingClientRect();
     const y = event.clientY - box.top;
     const edge = Math.max(5, box.height / 4);
-    const zone = y < edge ? 'before' : y > box.height - edge ? 'after' : 'into';
+    // A note cannot hold anything: its row is split in two, before and after.
+    const zone = row.hasAttribute('data-drop-edges')
+      ? (y < box.height / 2 ? 'before' : 'after')
+      : y < edge ? 'before' : y > box.height - edge ? 'after' : 'into';
     if (row !== dropRow || zone !== dropZone) {
       clearDropZone();
       dropRow = row;

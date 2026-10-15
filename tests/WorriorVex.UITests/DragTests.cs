@@ -65,4 +65,31 @@ public sealed class DragTests(BrowserFixture browser) : UITest(browser)
         await Page.ClickAsync(".wn-menu button:has-text('Move down')");
         await Expect(Page.Locator(".wn-navitem[data-level='1']").First).ToHaveTextAsync("2.0 Data Preparation");
     }
+
+    [Fact]
+    public async Task A_new_sub_notebook_goes_below_the_notes_and_items_move_among_each_other()
+    {
+        var notebook = await App.Get<INotebookService>().CreateAsync("Databricks");
+        var notes = App.Get<INoteService>();
+        await notes.CreateAsync(notebook.Id, null, "Note A");
+        await notes.CreateAsync(notebook.Id, null, "Note B");
+        await Page.ReloadAsync();
+        await Nav("Databricks").HoverAsync();
+        await Page.ClickAsync(".wn-navrow:has(.wn-navitem:text-is('Databricks')) .wn-row-add");
+        await Page.ClickAsync(".wn-menu button:has-text('New folder')");
+        await Page.FillAsync("#wn-prompt-input", "Sub");
+        await Page.Keyboard.PressAsync("Enter");
+
+        var rows = Page.Locator(".wn-navitem[data-level='1']");
+        await Expect(rows).ToHaveTextAsync(["Note A", "Note B", "Sub"]);
+
+        // Drag the folder onto the top half of "Note A": it goes above it.
+        await Page.Locator(".wn-navitem:text-is('Sub')").DragToAsync(Page.Locator(".wn-navitem:text-is('Note A')"), new LocatorDragToOptions { TargetPosition = new TargetPosition { X = 30, Y = 3 } });
+        await Expect(rows).ToHaveTextAsync(["Sub", "Note A", "Note B"]);
+
+        // Alt+↓ on "Sub" takes it one place down.
+        await Page.Locator(".wn-navitem:text-is('Sub')").FocusAsync();
+        await Page.Keyboard.PressAsync("Alt+ArrowDown");
+        await Expect(rows).ToHaveTextAsync(["Note A", "Sub", "Note B"]);
+    }
 }

@@ -114,6 +114,74 @@ public sealed class TreeService(
     }
 
     /// <summary>A destination is a notebook outside the trash and, optionally, a folder outside the trash in it.</summary>
+    public async Task MoveBesideAsync(Guid nodeId, Guid besideId, bool after, CancellationToken cancellationToken = default)
+    {
+        if (nodeId == besideId)
+        {
+            return;
+        }
+
+        BesidePlace place;
+        await using (var lookup = await contextFactory.CreateDbContextAsync(cancellationToken))
+        {
+            place = await lookup.Nodes.Where(n => n.Id == besideId && n.DeletedAt == null)
+                .Select(n => new BesidePlace(n.NotebookId, n.ParentId))
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw new EntityNotFoundException("Item", besideId);
+        }
+
+        // Into the place first (this also checks a folder is not going into itself), then into position.
+        await MoveAsync(nodeId, place.NotebookId, place.ParentId, cancellationToken: cancellationToken);
+
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var siblings = await SiblingsAsync(context, place.NotebookId, place.ParentId, cancellationToken);
+        var moving = siblings.First(n => n.Id == nodeId);
+        siblings.Remove(moving);
+        var index = siblings.FindIndex(n => n.Id == besideId);
+        siblings.Insert(index < 0 ? siblings.Count : index + (after ? 1 : 0), moving);
+        Renumber(siblings);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task MoveByAsync(Guid nodeId, int step, bool sameTypeOnly, CancellationToken cancellationToken = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var node = await context.Nodes.FirstOrDefaultAsync(n => n.Id == nodeId && n.DeletedAt == null, cancellationToken)
+            ?? throw new EntityNotFoundException("Item", nodeId);
+        var siblings = await SiblingsAsync(context, node.NotebookId, node.ParentId, cancellationToken);
+        var moving = siblings.First(n => n.Id == nodeId);
+        var visible = sameTypeOnly ? siblings.Where(n => n.Type == moving.Type).ToList() : siblings;
+        var target = visible.IndexOf(moving) + Math.Sign(step);
+        if (step == 0 || target < 0 || target >= visible.Count)
+        {
+            return;
+        }
+
+        // Past the neighbour it steps over, whatever lies between them stays where it is.
+        var neighbour = visible[target];
+        siblings.Remove(moving);
+        siblings.Insert(siblings.IndexOf(neighbour) + (step > 0 ? 1 : 0), moving);
+        Renumber(siblings);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>The notes and folders in one place, in their shared order.</summary>
+    private static Task<List<Node>> SiblingsAsync(WorriorVexDbContext context, Guid notebookId, Guid? parentId, CancellationToken cancellationToken) =>
+        context.Nodes
+            .Where(n => n.NotebookId == notebookId && n.ParentId == parentId && n.DeletedAt == null)
+            .OrderBy(n => n.SortOrder).ThenBy(n => n.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+    private static void Renumber(List<Node> nodes)
+    {
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            nodes[i].SetSortOrder(i);
+        }
+    }
+
+    private sealed record BesidePlace(Guid NotebookId, Guid? ParentId);
+
     public async Task<FolderSummary> MoveNotebookIntoAsync(Guid notebookId, Guid targetNotebookId, Guid? targetParentId, CancellationToken cancellationToken = default)
     {
         if (notebookId == targetNotebookId)

@@ -25,6 +25,7 @@
              OnRenameFolder="RenameFolderAsync" OnDeleteFolder="id => ConfirmDeleteFolder(id, FolderName(id))"
              OnOpenNote="OpenFromTreeAsync" OnNoteContextMenu="ShowNoteMenu" OnNoteDragStart="id => _dragging = (id, false)"
              OnRenameNote="RenameNoteAsync" OnDeleteNote="DeleteNoteAsync" OnAddUnderNote="AddUnderNote"
+             SharedOrder="@SharedOrder" OnDropOnNote="DropOnNoteAsync" OnMoveBy="MoveItemByAsync"
              OnDragStart="id => _dragging = (id, true)" OnNotebookDragStart="id => _draggingNotebook = id"
              OnDragEnd="() => { _dragging = null; _draggingNotebook = null; }" OnDrop="DropAsync" />
 
@@ -64,7 +65,7 @@
                 <button type="button" class="wn-button wn-button-small wn-button-quiet-danger" title="@(_selection is NavSelection.Folder ? T["Move this folder and everything in it to the trash"] : T["Move this notebook and everything in it to the trash"])" @onclick="ConfirmDeleteContainer">@(_selection is NavSelection.Folder ? T["Delete folder…"] : T["Delete notebook…"])</button>
             }
             <select class="wn-select wn-list-sort" aria-label="@T["Sort notes"]" title="@T["Sort notes"]" value="@Settings.Current.NoteSort" @onchange="e => SetSortAsync(Enum.Parse<NoteSort>((string)e.Value!))">
-                <option value="@NoteSort.Added">@T["In the order added"]</option>
+                <option value="@NoteSort.Added">@T["Your order (new at the bottom)"]</option>
                 <option value="@NoteSort.Updated">@T["Last changed"]</option>
                 <option value="@NoteSort.Created">@T["Newest"]</option>
                 <option value="@NoteSort.Title">@T["Title"]</option>

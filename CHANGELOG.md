@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.8 — 2026-10-15
+
+- Notes and folders in a place share one order, shown in the tree: a new folder or note goes at the
+  bottom, below what is already there (before, folders were always drawn above notes). Any note or
+  folder can be dragged above or below any other (drop on the top or bottom half of a note's row),
+  or moved with right-click **Move up / Move down** or **Alt+↑ / Alt+↓**.
+- The note list's default order is now called "Your order (new at the bottom)" and follows the same
+  order.
+
 ## 0.6.7 — 2026-10-12
 
 - Reorder folders and notebooks: drop one on the top or bottom edge of another row to place it before

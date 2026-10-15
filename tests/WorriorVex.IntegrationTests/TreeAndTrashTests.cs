@@ -346,4 +346,40 @@ public class TreeAndTrashTests
         await Assert.ThrowsAsync<WorriorVex.Domain.DomainException>(() => app.Tree.MoveNotebookIntoAsync(inbox.Id, notebook.Id, null));
         await Assert.ThrowsAsync<WorriorVex.Domain.DomainException>(() => app.Tree.MoveNotebookIntoAsync(notebook.Id, notebook.Id, null));
     }
+
+    [Fact]
+    public async Task Notes_and_folders_share_one_order_that_can_be_changed()
+    {
+        using var data = new TempDataDirectory();
+        await using var app = await TestApp.StartAsync(data.Path);
+        var notebook = await app.Notebooks.CreateAsync("Databricks");
+        var a = await app.Notes.CreateAsync(notebook.Id, null, "Note A");
+        var b = await app.Notes.CreateAsync(notebook.Id, null, "Note B");
+        var folder = await app.Tree.CreateFolderAsync(notebook.Id, null, "New sub-notebook");
+
+        async Task<string[]> Order()
+        {
+            var notes = await app.Notes.ListAsync(notebook.Id);
+            var folders = await app.Tree.ListFoldersAsync(notebook.Id);
+            return [.. notes.Select(n => (n.SortOrder, n.Title)).Concat(folders.Select(f => (f.SortOrder, f.Name))).OrderBy(x => x.SortOrder).Select(x => x.Item2)];
+        }
+
+        // Created last, so last: below the notes already there.
+        Assert.Equal(["Note A", "Note B", "New sub-notebook"], await Order());
+
+        await app.Tree.MoveBesideAsync(folder.Id, a.Id, after: false);
+        Assert.Equal(["New sub-notebook", "Note A", "Note B"], await Order());
+
+        await app.Tree.MoveByAsync(b.Id, -1, sameTypeOnly: false);
+        Assert.Equal(["New sub-notebook", "Note B", "Note A"], await Order());
+
+        // A note moved beside an item in another folder goes into that folder.
+        var inside = await app.Notes.CreateAsync(notebook.Id, folder.Id, "Inside");
+        await app.Tree.MoveBesideAsync(a.Id, inside.Id, after: true);
+        Assert.Equal(folder.Id, (await app.Notes.GetAsync(a.Id))!.ParentId);
+        Assert.Equal(["Inside", "Note A"], (await app.Notes.ListAsync(notebook.Id, folder.Id)).OrderBy(n => n.SortOrder).Select(n => n.Title));
+
+        // A folder cannot go beside something inside itself.
+        await Assert.ThrowsAsync<WorriorVex.Domain.DomainException>(() => app.Tree.MoveBesideAsync(folder.Id, inside.Id, after: true));
+    }
 }

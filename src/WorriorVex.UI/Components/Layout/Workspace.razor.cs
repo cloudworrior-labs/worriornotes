@@ -496,7 +496,7 @@ public partial class Workspace
     /// <summary>Pinned first, then by the chosen order.</summary>
     private IEnumerable<NoteSummary> Sorted(IEnumerable<NoteSummary> notes) => Settings.Current.NoteSort switch
     {
-        NoteSort.Added => notes.OrderByDescending(n => n.IsPinned).ThenBy(n => n.CreatedAt),
+        NoteSort.Added => notes.OrderByDescending(n => n.IsPinned).ThenBy(n => n.SortOrder).ThenBy(n => n.CreatedAt),
         NoteSort.Created => notes.OrderByDescending(n => n.IsPinned).ThenByDescending(n => n.CreatedAt),
         NoteSort.Title => notes.OrderByDescending(n => n.IsPinned).ThenBy(n => n.Title, StringComparer.CurrentCultureIgnoreCase),
         _ => notes.OrderByDescending(n => n.IsPinned).ThenByDescending(n => n.UpdatedAt),
@@ -1189,8 +1189,8 @@ public partial class Workspace
                 items.Add(new(T["New note"], () => NewNoteInAsync(folder.NotebookId, folder.FolderId)));
                 items.Add(new(T["New folder"], () => { PromptNewFolderIn(folder.NotebookId, folder.FolderId, folderName); return Task.CompletedTask; }));
                 items.Add(ContextMenu.Item.Line());
-                items.Add(new(T["Move up"], () => MoveFolderByAsync(folder.FolderId, -1)));
-                items.Add(new(T["Move down"], () => MoveFolderByAsync(folder.FolderId, 1)));
+                items.Add(new(T["Move up"], () => MoveItemByAsync((folder.FolderId, -1))));
+                items.Add(new(T["Move down"], () => MoveItemByAsync((folder.FolderId, 1))));
                 items.Add(ContextMenu.Item.Line());
                 items.Add(new(T["Rename…"], () => { PromptRenameFolder(folder.FolderId, folderName); return Task.CompletedTask; }));
                 items.Add(new(T["Move…"], () => { OpenMove(folder.FolderId, isFolder: true, folderName); return Task.CompletedTask; }));
@@ -1222,6 +1222,8 @@ public partial class Workspace
             new(note.IsPinned ? T["Unpin"] : T["Pin to top"], () => SetPinnedAsync(note, !note.IsPinned)),
             ContextMenu.Item.Line(),
             new(T["Move…"], () => { OpenMove(note.Id, isFolder: false, note.Title); return Task.CompletedTask; }),
+            new(T["Move up"], () => MoveItemByAsync((note.Id, -1))),
+            new(T["Move down"], () => MoveItemByAsync((note.Id, 1))),
             new(T["Duplicate"], () => DuplicateAsync(note.Id)),
             new(T["Export…"], () => { _menu = null; _export = note; return Task.CompletedTask; }),
             ContextMenu.Item.Line(),
@@ -1445,10 +1447,10 @@ public partial class Workspace
             return;
         }
 
-        if (dragged.IsFolder && zone != "into" && target is NavSelection.Folder sibling && sibling.FolderId != dragged.Id)
+        if (zone != "into" && target is NavSelection.Folder sibling && sibling.FolderId != dragged.Id)
         {
             // On the edge of a folder: beside it, in the same place, before or after it.
-            await PlaceFolderBesideAsync(dragged.Id, sibling.FolderId, after: zone == "after");
+            await PlaceBesideAsync(dragged.Id, sibling.FolderId, after: zone == "after");
             return;
         }
 
@@ -1476,50 +1478,44 @@ public partial class Workspace
 
     // ---- Notebooks and folders -----------------------------------------------------------------
 
-    /// <summary>Folders beside one another, in the order the tree shows them.</summary>
-    private List<FolderSummary> SiblingsOf(Guid notebookId, Guid? parentId) =>
-        [.. _folders.Where(f => f.NotebookId == notebookId && f.ParentId == parentId).OrderBy(f => f.SortOrder).ThenBy(f => f.Name, StringComparer.CurrentCulture)];
+    /// <summary>Notes and folders share one order when the list shows them in the person's own order and the tree shows notes.</summary>
+    private bool SharedOrder => Settings.Current.NoteSort == NoteSort.Added && Settings.Current.ShowNotesInTree;
 
-    private async Task PlaceFolderBesideAsync(Guid folderId, Guid besideId, bool after)
+    private async Task PlaceBesideAsync(Guid itemId, Guid besideId, bool after)
     {
-        var beside = _folders.FirstOrDefault(f => f.Id == besideId);
-        var moving = _folders.FirstOrDefault(f => f.Id == folderId);
-        if (beside is null || moving is null)
-        {
-            return;
-        }
-
-        var siblings = SiblingsOf(beside.NotebookId, beside.ParentId).Where(f => f.Id != folderId).ToList();
-        var index = siblings.FindIndex(f => f.Id == besideId) + (after ? 1 : 0);
-        await RunAsync(T["That could not be moved."], async () =>
-        {
-            await Tree.MoveAsync(folderId, beside.NotebookId, beside.ParentId, index);
-            await LoadStructureAsync();
-        });
-    }
-
-    /// <summary>Up (-1) or down (+1) among the folders beside it.</summary>
-    private async Task MoveFolderByAsync(Guid folderId, int step)
-    {
-        var folder = _folders.FirstOrDefault(f => f.Id == folderId);
-        if (folder is null)
-        {
-            return;
-        }
-
-        var siblings = SiblingsOf(folder.NotebookId, folder.ParentId);
-        var index = siblings.FindIndex(f => f.Id == folderId) + step;
-        if (index < 0 || index >= siblings.Count)
+        if (!await SaveBeforeLeavingAsync())
         {
             return;
         }
 
         await RunAsync(T["That could not be moved."], async () =>
         {
-            await Tree.MoveAsync(folderId, folder.NotebookId, folder.ParentId, index);
+            await Tree.MoveBesideAsync(itemId, besideId, after);
             await LoadStructureAsync();
+            await LoadListAsync(openFirst: false);
         });
     }
+
+    /// <summary>A note or folder was let go on a note's row: before or after that note.</summary>
+    private async Task DropOnNoteAsync(Guid noteId)
+    {
+        var dragged = _dragging;
+        _dragging = null;
+        _draggingNotebook = null;
+        var zone = await DropZoneAsync();
+        if (dragged is { } item && item.Id != noteId)
+        {
+            await PlaceBesideAsync(item.Id, noteId, after: zone != "before");
+        }
+    }
+
+    /// <summary>Up (-1) or down (+1) among its neighbours: Move up / Move down, or Alt+↑ / Alt+↓.</summary>
+    private Task MoveItemByAsync((Guid Id, int Step) move) => RunAsync(T["That could not be moved."], async () =>
+    {
+        await Tree.MoveByAsync(move.Id, move.Step, sameTypeOnly: !SharedOrder);
+        await LoadStructureAsync();
+        await LoadListAsync(openFirst: false);
+    });
 
     private List<NotebookSummary> OrderedUserNotebooks => [.. _notebooks.Where(n => !n.IsInbox && !n.IsCalendar)];
 

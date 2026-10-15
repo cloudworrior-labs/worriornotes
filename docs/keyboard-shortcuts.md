@@ -30,6 +30,7 @@
 | `←` | Close a branch, or step out to its parent |
 | `Home` / `End` | First / last row |
 | `Enter` or `Space` | Select the row |
+| `Alt + ↑` / `Alt + ↓` | Move the row up or down among its neighbours |
 | `F2` or double-click | Rename in place (`Enter` keeps, `Esc` gives up) |
 | `Delete` | Move the row to the trash |
 

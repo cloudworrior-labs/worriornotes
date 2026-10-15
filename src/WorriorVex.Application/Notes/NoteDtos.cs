@@ -11,7 +11,8 @@ public sealed record NoteSummary(
     bool IsFavorite = false,
     bool IsPinned = false,
     DateTimeOffset? LastOpenedAt = null,
-    int LinkCount = 0);
+    int LinkCount = 0,
+    int SortOrder = 0);
 
 /// <summary>A note with its body, as opened in the editor.</summary>
 public sealed record NoteDetail(

@@ -32,7 +32,7 @@
                                 OnDragStart="OnDragStart" OnDragEnd="OnDragEnd" OnDragEnter="id => _dropTarget = id" OnDrop="DropAsync" OnAddFolder="OnAddFolder"
                                 OnRenameFolder="OnRenameFolder" OnDeleteFolder="OnDeleteFolder" OnAddUnderNote="OnAddUnderNote"
                                 OnOpenNote="OnOpenNote" OnNoteContextMenu="OnNoteContextMenu" OnNoteDragStart="OnNoteDragStart"
-                                OnRenameNote="OnRenameNote" OnDeleteNote="OnDeleteNote" Level="1" />
+                                OnRenameNote="OnRenameNote" OnDeleteNote="OnDeleteNote" SharedOrder="SharedOrder" OnDropOnNote="OnDropOnNote" OnMoveBy="OnMoveBy" Level="1" />
                 }
             </li>
         }
@@ -129,7 +129,7 @@
                                     OnDragStart="OnDragStart" OnDragEnd="OnDragEnd" OnDragEnter="id => _dropTarget = id" OnDrop="DropAsync" OnAddFolder="OnAddFolder"
                                     OnRenameFolder="OnRenameFolder" OnDeleteFolder="OnDeleteFolder" OnAddUnderNote="OnAddUnderNote"
                                     OnOpenNote="OnOpenNote" OnNoteContextMenu="OnNoteContextMenu" OnNoteDragStart="OnNoteDragStart"
-                                    OnRenameNote="OnRenameNote" OnDeleteNote="OnDeleteNote" Level="1" />
+                                    OnRenameNote="OnRenameNote" OnDeleteNote="OnDeleteNote" SharedOrder="SharedOrder" OnDropOnNote="OnDropOnNote" OnMoveBy="OnMoveBy" Level="1" />
                     }
                 </li>
             }
@@ -247,6 +247,9 @@
     /// <summary>The + on a notebook or folder row: a new folder inside it.</summary>
     [Parameter] public EventCallback<(Guid NotebookId, Guid? ParentId, MouseEventArgs Mouse)> OnAddFolder { get; set; }
     [Parameter] public EventCallback<(NoteSummary Note, MouseEventArgs Mouse)> OnAddUnderNote { get; set; }
+    [Parameter] public bool SharedOrder { get; set; }
+    [Parameter] public EventCallback<Guid> OnDropOnNote { get; set; }
+    [Parameter] public EventCallback<(Guid Id, int Step)> OnMoveBy { get; set; }
 
     /// <summary>A folder in the tree started being dragged.</summary>
     [Parameter] public EventCallback<Guid> OnDragStart { get; set; }

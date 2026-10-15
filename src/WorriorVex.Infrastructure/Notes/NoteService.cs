@@ -209,7 +209,7 @@ public sealed class NoteService(
     /// <summary>Rows for a list; the link count is the links to and from the note, found in the same query.</summary>
     private static IQueryable<NoteSummary> Summaries(WorriorVexDbContext context, IQueryable<Node> notes) =>
         notes.Select(n => new NoteSummary(n.Id, n.NotebookId, n.Name, n.CreatedAt, n.UpdatedAt, n.ParentId, n.IsFavorite, n.IsPinned, n.LastOpenedAt,
-            context.NoteLinks.Count(l => l.SourceNoteId == n.Id || l.TargetNoteId == n.Id)));
+            context.NoteLinks.Count(l => l.SourceNoteId == n.Id || l.TargetNoteId == n.Id), n.SortOrder));
 
     public async Task<IReadOnlyList<NoteSummary>> ListLooseEndsAsync(CancellationToken cancellationToken = default)
     {

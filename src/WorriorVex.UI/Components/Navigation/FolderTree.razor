@@ -1,7 +1,9 @@
 @inject Translator T
 @* One level of the tree: the folders and, when wanted, the notes directly inside a notebook or folder. *@
 <ul class="wn-nav-list wn-tree" style="--wn-level: @Level">
-    @foreach (var folder in Children[(NotebookId, ParentId)])
+    @foreach (var entry in Entries)
+    {
+    @if (entry is FolderSummary folder)
     {
         var selection = new NavSelection.Folder(folder.NotebookId, folder.Id);
         var selected = selection == Selection;
@@ -45,11 +47,11 @@
                             OnDragStart="OnDragStart" OnDragEnd="OnDragEnd" OnDragEnter="OnDragEnter" OnDrop="OnDrop" OnAddFolder="OnAddFolder"
                             OnRenameFolder="OnRenameFolder" OnDeleteFolder="OnDeleteFolder" OnAddUnderNote="OnAddUnderNote"
                             OnOpenNote="OnOpenNote" OnNoteContextMenu="OnNoteContextMenu" OnNoteDragStart="OnNoteDragStart"
-                            OnRenameNote="OnRenameNote" OnDeleteNote="OnDeleteNote" Level="Level + 1" />
+                            OnRenameNote="OnRenameNote" OnDeleteNote="OnDeleteNote" SharedOrder="SharedOrder" OnDropOnNote="OnDropOnNote" OnMoveBy="OnMoveBy" Level="Level + 1" />
             }
         </li>
     }
-    @foreach (var note in Notes[(NotebookId, ParentId)])
+    else if (entry is NoteSummary note)
     {
         var current = note.Id == CurrentNoteId;
         <li @key="note.Id">
@@ -61,12 +63,13 @@
                 }
                 else
                 {
-                    <button type="button" class="wn-navitem wn-navnote @(current ? "is-selected" : null)" data-tree-item data-level="@Level"
+                    <button type="button" class="wn-navitem wn-navnote @(current ? "is-selected" : null)" data-tree-item data-drop-row data-drop-edges data-level="@Level"
                             aria-current="@(current ? "true" : null)" draggable="true" title="@note.Title"
                             @onclick="() => OnOpenNote.InvokeAsync(note.Id)" @ondblclick="() => _renamingId = note.Id"
                             @onkeydown="e => OnNoteKeyAsync(e, note)"
                             @oncontextmenu:preventDefault @oncontextmenu="e => OnNoteContextMenu.InvokeAsync((note, e))"
-                            @ondragstart="() => OnNoteDragStart.InvokeAsync(note.Id)" @ondragend="OnDragEnd">
+                            @ondragstart="() => OnNoteDragStart.InvokeAsync(note.Id)" @ondragend="OnDragEnd"
+                            @ondragover:preventDefault @ondrop:preventDefault @ondrop="() => OnDropOnNote.InvokeAsync(note.Id)">
                         @if (note.IsPinned)
                         {
                             <span class="wn-noteitem-flag" aria-label="@T["Pinned"]">⌖</span>
@@ -82,6 +85,7 @@
                         @onclick="e => OnAddUnderNote.InvokeAsync((note, e))">+</button>
             </div>
         </li>
+    }
     }
 </ul>
 
@@ -117,6 +121,33 @@
     [Parameter] public EventCallback<Guid> OnDeleteNote { get; set; }
     [Parameter] public int Level { get; set; } = 1;
 
+    /// <summary>Notes and folders share one order (the person's own); otherwise folders come first, then notes.</summary>
+    [Parameter] public bool SharedOrder { get; set; }
+
+    /// <summary>Something was dropped on a note's row: before or after it, by where it was let go.</summary>
+    [Parameter] public EventCallback<Guid> OnDropOnNote { get; set; }
+
+    /// <summary>Alt+↑ / Alt+↓ on a row: one step up or down among its neighbours.</summary>
+    [Parameter] public EventCallback<(Guid Id, int Step)> OnMoveBy { get; set; }
+
+    private IEnumerable<object> Entries
+    {
+        get
+        {
+            var folders = Children[(NotebookId, ParentId)];
+            var notes = Notes[(NotebookId, ParentId)];
+            if (!SharedOrder)
+            {
+                return folders.Cast<object>().Concat(notes);
+            }
+
+            return folders.Select(f => (Order: f.SortOrder, Kind: 0, Item: (object)f))
+                .Concat(notes.Select(n => (Order: n.SortOrder, Kind: 1, Item: (object)n)))
+                .OrderBy(e => e.Order).ThenBy(e => e.Kind)
+                .Select(e => e.Item);
+        }
+    }
+
     private async Task CommitRenameAsync(Guid folderId, string name)
     {
         _renamingId = null;
@@ -133,6 +164,9 @@
     {
         switch (args.Key)
         {
+            case "ArrowUp" or "ArrowDown" when args.AltKey:
+                await OnMoveBy.InvokeAsync((folderId, args.Key == "ArrowUp" ? -1 : 1));
+                break;
             case "F2":
                 _renamingId = folderId;
                 break;
@@ -146,6 +180,9 @@
     {
         switch (args.Key)
         {
+            case "ArrowUp" or "ArrowDown" when args.AltKey:
+                await OnMoveBy.InvokeAsync((note.Id, args.Key == "ArrowUp" ? -1 : 1));
+                break;
             case "F2":
                 _renamingId = note.Id;
                 break;
