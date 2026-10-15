@@ -48,9 +48,9 @@ public sealed class CalendarTests(BrowserFixture browser) : UITest(browser)
         var title = await Page.Locator("#wn-calendar-title").InnerTextAsync();
         await Page.ClickAsync(".wn-cal-nav button[aria-label='Next month']");
         await Expect(Page.Locator("#wn-calendar-title")).Not.ToHaveTextAsync(title);
-        var today = Page.Locator(".wn-cal-nav button", new PageLocatorOptions { HasTextString = "Today" });
-        await Expect(today).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 });
-        await today.ClickAsync();
+        var todayButton = Page.Locator(".wn-cal-nav button", new PageLocatorOptions { HasTextString = "Today" });
+        await Expect(todayButton).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 });
+        await todayButton.ClickAsync();
         await Expect(Page.Locator("#wn-calendar-title")).ToHaveTextAsync(title);
         await Expect(Page.Locator(".wn-cal-day.is-today .wn-cal-entry")).ToHaveCountAsync(2);
     }
