@@ -79,6 +79,7 @@ public partial class Workspace
     private IJSObjectReference? _navResizerHandle;
     private IJSObjectReference? _listResizerHandle;
     private readonly SemaphoreSlim _attachGate = new(1, 1);
+    private IJSObjectReference? _pointerDrag;
     private bool _disposed;
     private string? _navResizerAttachedTo;
     private string? _listResizerAttachedTo;
@@ -278,6 +279,7 @@ public partial class Workspace
             await ApplyAppearanceAsync(Settings.Current);
             await _shortcutsModule.InvokeVoidAsync("setPaneWidth", NavWidthVariable, Settings.Current.NavigationWidth);
             await _shortcutsModule.InvokeVoidAsync("setPaneWidth", ListWidthVariable, Settings.Current.ListWidth);
+            _pointerDrag = await _shortcutsModule.InvokeAsync<IJSObjectReference>("attachPointerDrag", _self);
         }
 
         if (_shortcutsModule is null || _disposed)
@@ -1408,8 +1410,63 @@ public partial class Workspace
     }
 
     /// <summary>A note or folder was dropped on a notebook or folder in the navigation.</summary>
+    /// <summary>A drag made with the pointer ended over a row.</summary>
+    [JSInvokable]
+    public Task OnPointerDrop(string dragKind, string dragId, string dropKind, string dropId, string zone) => InvokeAsync(async () =>
+    {
+        if (!Guid.TryParse(dragId, out var dragged) || !Guid.TryParse(dropId, out var target) || dragged == target)
+        {
+            return;
+        }
+
+        _pointerZone = zone;
+        try
+        {
+            switch (dragKind)
+            {
+                case "notebook":
+                    _draggingNotebook = dragged;
+                    break;
+                case "folder":
+                    _dragging = (dragged, true);
+                    break;
+                default:
+                    _dragging = (dragged, false);
+                    break;
+            }
+
+            switch (dropKind)
+            {
+                case "note":
+                    await DropOnNoteAsync(target);
+                    break;
+                case "folder" when _folders.FirstOrDefault(f => f.Id == target) is { } folder:
+                    await DropAsync(new NavSelection.Folder(folder.NotebookId, folder.Id));
+                    break;
+                case "notebook":
+                    await DropAsync(new NavSelection.Notebook(target));
+                    break;
+            }
+        }
+        finally
+        {
+            _pointerZone = null;
+            _dragging = null;
+            _draggingNotebook = null;
+            StateHasChanged();
+        }
+    });
+
+    /// <summary>The zone of a pointer drop in progress; when set it is used instead of asking the page.</summary>
+    private string? _pointerZone;
+
     private async Task<string> DropZoneAsync()
     {
+        if (_pointerZone is { } pointerZone)
+        {
+            return pointerZone;
+        }
+
         try
         {
             return _shortcutsModule is null ? "into" : await _shortcutsModule.InvokeAsync<string>("lastDropZone");
@@ -2066,7 +2123,7 @@ public partial class Workspace
                 await _shortcuts.DisposeAsync();
             }
 
-            foreach (var handle in new[] { _navResizerHandle, _listResizerHandle, _treeKeysHandle })
+            foreach (var handle in new[] { _navResizerHandle, _listResizerHandle, _treeKeysHandle, _pointerDrag })
             {
                 if (handle is not null)
                 {

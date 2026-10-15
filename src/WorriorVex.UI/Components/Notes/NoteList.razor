@@ -33,7 +33,7 @@
                     else
                     {
                     <button type="button" class="wn-noteitem @(selected ? "is-selected" : null)" aria-current="@(selected ? "true" : null)"
-                            draggable="true" @ondragstart="() => OnDragStart.InvokeAsync(note.Id)" @ondragend="OnDragEnd"
+                            data-drag-kind="note" data-drag-id="@note.Id" @ondragstart="() => OnDragStart.InvokeAsync(note.Id)" @ondragend="OnDragEnd"
                             @oncontextmenu:preventDefault @oncontextmenu="e => OnContextMenu.InvokeAsync((note, e))"
                             @onclick="() => OnSelect.InvokeAsync(note.Id)" @ondblclick="() => _renamingId = note.Id" @onkeydown="e => OnKeyAsync(e, note.Id)">
                         <span class="wn-noteitem-title">

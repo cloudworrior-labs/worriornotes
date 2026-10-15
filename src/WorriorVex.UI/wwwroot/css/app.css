@@ -970,3 +970,8 @@ mark { background: var(--wn-mark-bg); color: inherit; border-radius: 2px; paddin
 .wn-navitem.wn-drop-before { box-shadow: inset 0 2px 0 var(--wn-accent); border-radius: 0; }
 .wn-navitem.wn-drop-after { box-shadow: inset 0 -2px 0 var(--wn-accent); border-radius: 0; }
 .wn-navitem.wn-drop-before.is-droptarget, .wn-navitem.wn-drop-after.is-droptarget { background: transparent; }
+
+/* Pointer dragging */
+.wn-drag-ghost { position: fixed; z-index: var(--wn-z-dialog); pointer-events: none; max-width: 260px; padding: 2px var(--wn-space-2); border-radius: var(--wn-radius); background: var(--wn-accent); color: var(--wn-accent-text); font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: var(--wn-shadow-dialog); opacity: 0.92; }
+body.is-dragging-item, body.is-dragging-item * { cursor: grabbing !important; user-select: none; }
+.wn-navitem.wn-drop-into { outline: 2px dashed var(--wn-accent); outline-offset: -2px; background: var(--wn-bg-selected); }

@@ -236,3 +236,121 @@ export function attachTreeKeys(nav) {
   nav.addEventListener('keydown', onKeyDown);
   return { dispose: () => nav.removeEventListener('keydown', onKeyDown) };
 }
+
+/**
+ * Dragging notes, folders and notebooks with the pointer. The browser's own drag and drop is not
+ * delivered inside every desktop web view (Windows' WebView2 among them), so the drag is followed
+ * here from ordinary pointer events, the same everywhere. A row is dragged when it carries
+ * data-drag-kind and data-drag-id; a row receives when it carries data-drop-row, data-drop-kind and
+ * data-drop-id. On release .NET gets OnPointerDrop(dragKind, dragId, dropKind, dropId, zone).
+ */
+export function attachPointerDrag(dotNetRef) {
+  const threshold = 5;
+  let pending = null;
+  let dragging = null;
+  let ghost = null;
+  let over = null;
+  let zone = 'into';
+
+  const clearOver = () => {
+    over?.classList.remove('wn-drop-before', 'wn-drop-after', 'wn-drop-into');
+    over = null;
+  };
+
+  const stop = () => {
+    clearOver();
+    ghost?.remove();
+    ghost = null;
+    dragging = null;
+    pending = null;
+    document.body.classList.remove('is-dragging-item');
+  };
+
+  const onDown = (event) => {
+    if (event.button !== 0 || event.pointerType === 'touch') {
+      return;
+    }
+    const source = event.target.closest?.('[data-drag-kind][data-drag-id]');
+    if (!source || event.target.closest('input, textarea, [contenteditable="true"]')) {
+      return;
+    }
+    pending = { source, x: event.clientX, y: event.clientY, id: event.pointerId };
+  };
+
+  const onMove = (event) => {
+    if (!pending && !dragging) {
+      return;
+    }
+    if (!dragging) {
+      if (Math.abs(event.clientX - pending.x) < threshold && Math.abs(event.clientY - pending.y) < threshold) {
+        return;
+      }
+      dragging = { kind: pending.source.dataset.dragKind, id: pending.source.dataset.dragId, source: pending.source };
+      ghost = document.createElement('div');
+      ghost.className = 'wn-drag-ghost';
+      ghost.textContent = (pending.source.querySelector('.wn-noteitem-title') ?? pending.source).textContent.trim();
+      document.body.appendChild(ghost);
+      document.body.classList.add('is-dragging-item');
+    }
+    event.preventDefault();
+    ghost.style.left = `${event.clientX + 12}px`;
+    ghost.style.top = `${event.clientY + 8}px`;
+
+    const row = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-drop-row][data-drop-id]');
+    if (!row || row === dragging.source) {
+      clearOver();
+      return;
+    }
+    const box = row.getBoundingClientRect();
+    const y = event.clientY - box.top;
+    const edge = Math.max(5, box.height / 4);
+    const next = row.hasAttribute('data-drop-edges')
+      ? (y < box.height / 2 ? 'before' : 'after')
+      : y < edge ? 'before' : y > box.height - edge ? 'after' : 'into';
+    if (row !== over || next !== zone) {
+      clearOver();
+      over = row;
+      zone = next;
+      row.classList.add(`wn-drop-${zone}`);
+    }
+  };
+
+  const onUp = () => {
+    if (!dragging) {
+      pending = null;
+      return;
+    }
+    const drop = over && { kind: over.dataset.dropKind, id: over.dataset.dropId, zone };
+    const from = dragging;
+    stop();
+    // The release would also count as a click on the row it ended over; that click is not wanted.
+    const swallow = (e) => { e.stopPropagation(); e.preventDefault(); };
+    window.addEventListener('click', swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0);
+    if (drop) {
+      dotNetRef.invokeMethodAsync('OnPointerDrop', from.kind, from.id, drop.kind, drop.id, drop.zone);
+    }
+  };
+
+  const onKey = (event) => {
+    if (event.key === 'Escape' && dragging) {
+      stop();
+    }
+  };
+
+  document.addEventListener('pointerdown', onDown, true);
+  document.addEventListener('pointermove', onMove, true);
+  document.addEventListener('pointerup', onUp, true);
+  document.addEventListener('pointercancel', stop, true);
+  document.addEventListener('keydown', onKey, true);
+  return {
+    dispose: () => {
+      stop();
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('pointermove', onMove, true);
+      document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('pointercancel', stop, true);
+      document.removeEventListener('keydown', onKey, true);
+    },
+  };
+}

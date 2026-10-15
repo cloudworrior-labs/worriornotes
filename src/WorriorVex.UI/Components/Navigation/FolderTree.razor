@@ -29,7 +29,7 @@
                 {
                     <button type="button" class="wn-navitem @(selected ? "is-selected" : null) @(DropTarget == folder.Id ? "is-droptarget" : null)"
                             data-tree-item data-drop-row data-level="@Level" data-expanded="@(hasChildren ? (expanded ? "true" : "false") : null)"
-                            aria-current="@(selected ? "true" : null)" draggable="true" title="@folder.Name"
+                            aria-current="@(selected ? "true" : null)" data-drag-kind="folder" data-drag-id="@folder.Id" data-drop-kind="folder" data-drop-id="@folder.Id" title="@folder.Name"
                             @onclick="() => OnSelect.InvokeAsync(selection)" @ondblclick="() => _renamingId = folder.Id"
                             @onkeydown="e => OnRowKeyAsync(e, folder.Id, selection)"
                             @oncontextmenu:preventDefault @oncontextmenu="e => OnContextMenu.InvokeAsync((selection, e))"
@@ -64,7 +64,7 @@
                 else
                 {
                     <button type="button" class="wn-navitem wn-navnote @(current ? "is-selected" : null)" data-tree-item data-drop-row data-drop-edges data-level="@Level"
-                            aria-current="@(current ? "true" : null)" draggable="true" title="@note.Title"
+                            aria-current="@(current ? "true" : null)" data-drag-kind="note" data-drag-id="@note.Id" data-drop-kind="note" data-drop-id="@note.Id" title="@note.Title"
                             @onclick="() => OnOpenNote.InvokeAsync(note.Id)" @ondblclick="() => _renamingId = note.Id"
                             @onkeydown="e => OnNoteKeyAsync(e, note)"
                             @oncontextmenu:preventDefault @oncontextmenu="e => OnNoteContextMenu.InvokeAsync((note, e))"

@@ -20,6 +20,7 @@
                         <span class="wn-twisty" aria-hidden="true"></span>
                     }
                     <button type="button" class="wn-navitem @SelectedClass(inbox) @DropClass(Inbox.Id)" aria-current="@Current(inbox)"
+                            data-drop-row data-drop-kind="notebook" data-drop-id="@Inbox.Id"
                             data-tree-item data-level="0" data-expanded="@(inboxHasNotes ? (inboxExpanded ? "true" : "false") : null)"
                             @onclick="() => OnSelect.InvokeAsync(inbox)"
                             @oncontextmenu:preventDefault @oncontextmenu="e => OnContextMenu.InvokeAsync((inbox, e))"
@@ -116,7 +117,7 @@
                                     @onclick="() => OnSelect.InvokeAsync(selection)" @ondblclick="() => _renamingId = notebook.Id"
                                     @onkeydown="e => OnNotebookKeyAsync(e, notebook.Id)"
                                     @oncontextmenu:preventDefault @oncontextmenu="e => OnContextMenu.InvokeAsync((selection, e))"
-                                    draggable="true" @ondragstart="() => OnNotebookDragStart.InvokeAsync(notebook.Id)" @ondragend="OnDragEnd"
+                                    data-drag-kind="notebook" data-drag-id="@notebook.Id" data-drop-kind="notebook" data-drop-id="@notebook.Id"
                                     @ondragenter="() => _dropTarget = notebook.Id" @ondragover:preventDefault @ondrop:preventDefault @ondrop="() => DropAsync(selection)">@notebook.Name</button>
                         }
                         <button type="button" class="wn-row-add" title="@T["Add a note or folder in {0}", notebook.Name]" aria-label="@T["Add a note or folder in {0}", notebook.Name]" tabindex="-1"

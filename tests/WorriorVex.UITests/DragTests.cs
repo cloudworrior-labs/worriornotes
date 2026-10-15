@@ -92,4 +92,29 @@ public sealed class DragTests(BrowserFixture browser) : UITest(browser)
         await Page.Keyboard.PressAsync("Alt+ArrowDown");
         await Expect(rows).ToHaveTextAsync(["Note A", "Sub", "Note B"]);
     }
+
+    [Fact]
+    public async Task A_note_is_dragged_from_the_list_into_a_folder_with_plain_mouse_moves()
+    {
+        var notebook = await App.Get<INotebookService>().CreateAsync("Work");
+        var folder = await App.Get<ITreeService>().CreateFolderAsync(notebook.Id, null, "Archive");
+        var note = await App.Get<INoteService>().CreateAsync(notebook.Id, null, "Old report");
+        await Page.ReloadAsync();
+        await Nav("Work").ClickAsync();
+
+        // No browser drag and drop involved: press, move in small steps, release, the way a hand does.
+        var source = (await Page.Locator(".wn-notelist .wn-noteitem:has-text('Old report')").BoundingBoxAsync())!;
+        var target = (await Page.Locator(".wn-navitem:text-is('Archive')").BoundingBoxAsync())!;
+        await Page.Mouse.MoveAsync(source.X + 20, source.Y + source.Height / 2);
+        await Page.Mouse.DownAsync();
+        await Page.Mouse.MoveAsync(target.X + 20, target.Y + target.Height / 2, new MouseMoveOptions { Steps = 12 });
+        await Expect(Page.Locator(".wn-drag-ghost")).ToHaveTextAsync("Old report");
+        await Expect(Page.Locator(".wn-navitem:text-is('Archive')")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("wn-drop-into"));
+        await Page.Mouse.UpAsync();
+
+        await Expect(Page.Locator(".wn-notelist .wn-noteitem:has-text('Old report')")).ToHaveCountAsync(0);
+        await Expect(Page.Locator(".wn-drag-ghost")).ToHaveCountAsync(0);
+        Assert.Equal(folder.Id, (await App.Get<INoteService>().GetAsync(note.Id))!.ParentId);
+        Assert.Equal(0, await Page.Locator(".wn-nav [draggable='true'], .wn-notelist [draggable='true']").CountAsync());
+    }
 }

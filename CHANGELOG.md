@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.9 — 2026-10-15
+
+- Fixed: dragging notes, folders and notebooks did nothing on Windows. Dragging no longer relies on the
+  browser's built-in drag and drop (which the Windows web view does not deliver here); the app follows
+  the pointer itself, the same on Windows, macOS and Linux, with a label that travels with the pointer.
+  Escape cancels a drag.
+
 ## 0.6.8 — 2026-10-15
 
 - Notes and folders in a place share one order, shown in the tree: a new folder or note goes at the
